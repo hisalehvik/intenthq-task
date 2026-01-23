@@ -1,0 +1,712 @@
+{
+  "name": "intentHQ – Prospect Presentation Generator (Docs )",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "generate-presentation",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Webhook – Prospect Input",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        1216,
+        480
+      ],
+      "id": "7f96474a-f904-40a4-aa19-58603c66d311",
+      "webhookId": "c56e00a5-2f85-43dc-9ac6-f3a22ef32402"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "prospect_company",
+              "value": "={{$json.prospect_company || $json.query?.prospect_company || 'Spotify'}}"
+            },
+            {
+              "name": "presentation_title",
+              "value": "={{$json.presentation_title || $json.query?.presentation_title || (($json.prospect_company || $json.query?.prospect_company || 'Prospect') + ': Behavioral Intelligence Strategy')}}"
+            },
+            {
+              "name": "slides_count",
+              "value": "={{$json.slides_count || $json.query?.slides_count || '10'}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set – Normalize Inputs",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        1456,
+        480
+      ],
+      "id": "151bd99b-c5ff-445b-8938-64803c5ddf4b"
+    },
+    {
+      "parameters": {
+        "url": "https://intenthq.com/",
+        "responseFormat": "string",
+        "options": {
+          "followRedirect": true
+        }
+      },
+      "name": "HTTP – Fetch intentHQ Home",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        1696,
+        256
+      ],
+      "id": "1d86f8bc-d647-47ff-930c-4bc553daef6b"
+    },
+    {
+      "parameters": {
+        "url": "https://intenthq.com/platform/intent-edge/",
+        "responseFormat": "string",
+        "options": {
+          "followRedirect": true
+        }
+      },
+      "name": "HTTP – Fetch intentHQ Intent Edge",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        1696,
+        416
+      ],
+      "id": "52f77cda-b1e2-4586-8172-85d94cf76bf3"
+    },
+    {
+      "parameters": {
+        "url": "https://intenthq.com/platform/intent-lift/",
+        "responseFormat": "string",
+        "options": {
+          "followRedirect": true
+        }
+      },
+      "name": "HTTP – Fetch intentHQ Intent Lift",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        1696,
+        576
+      ],
+      "id": "1804391f-b4ff-4a03-8d60-b1254ae58547"
+    },
+    {
+      "parameters": {
+        "url": "https://intenthq.com/values/",
+        "responseFormat": "string",
+        "options": {
+          "followRedirect": true
+        }
+      },
+      "name": "HTTP – Fetch intentHQ Values",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        1696,
+        736
+      ],
+      "id": "9459f1bb-5c2e-42ba-a275-369e9a1f34d9"
+    },
+    {
+      "parameters": {},
+      "name": "Merge – Website Pages",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2,
+      "position": [
+        1936,
+        480
+      ],
+      "id": "cbc02b71-b3b8-4bb9-ad50-74a6711b8a5e"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nfunction stripHtml(html) {\n  if (!html) return '';\n  html = html.replace(/<script[\\s\\S]*?<\\/script>/gi, ' ');\n  html = html.replace(/<style[\\s\\S]*?<\\/style>/gi, ' ');\n  let text = html.replace(/<[^>]+>/g, ' ');\n  text = text\n    .replace(/&nbsp;/g, ' ')\n    .replace(/&amp;/g, '&')\n    .replace(/&lt;/g, '<')\n    .replace(/&gt;/g, '>');\n  text = text.replace(/\\s+/g, ' ').trim();\n  return text;\n}\n\nconst pageTexts = items.map((it, idx) => {\n  const raw = it.json?.data ?? it.json ?? '';\n  const url = it.json?.url || `page_${idx + 1}`;\n  return `URL: ${url}\\nTEXT: ${stripHtml(String(raw)).slice(0, 20000)}`;\n});\n\nconst combined = pageTexts.join('\\n\\n---\\n\\n');\n\n\nreturn items.map((it) => ({\n  json: {\n    ...it.json,\n    website_corpus_text: combined,\n  },\n}));\n"
+      },
+      "name": "Code – HTML to Text (Corpus)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2176,
+        480
+      ],
+      "id": "be076607-0839-4a34-b693-2905e3af12ea"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4O-MINI"
+        },
+        "responses": {
+          "values": [
+            {
+              "content": "=You are a brand analysis agent for intentHQ.\n\nTask: Extract intentHQ’s brand grounding from the website corpus.\nReturn STRICT JSON with these keys:\n- core_value_propositions: string[]\n- messaging_tone: string\n- messaging_style_rules: string[]\n- product_capabilities: string[]\n- use_cases_mentioned: string[]\n- proof_points: string[] (ONLY what is explicitly in corpus)\n- compliance_privacy_positioning: string[]\n- forbidden_claims: string[]\n\nRules:\n- Use ONLY the corpus below.\n- Do NOT invent facts, metrics, customers, awards, integrations, or outcomes.\n- If unclear, omit.\n\nWebsite corpus:\n{{$json.website_corpus_text}}\n"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "name": "OpenAI – Brand Grounding Extractor",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2,
+      "position": [
+        2416,
+        480
+      ],
+      "id": "061d36c7-db56-47a9-9901-a9a62efce0bc",
+      "credentials": {
+        "openAiApi": {
+          "id": "YVUXALLrTV90ti3L",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "brand_context_json",
+              "value": "={{$json.output?.[0]?.content?.[0]?.text || $json.choices?.[0]?.message?.content || ''}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set – Save Brand Context",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        2656,
+        480
+      ],
+      "id": "6e586b90-5e38-4545-b3b0-d776a21bc42c"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "responses": {
+          "values": [
+            {
+              "content": "=You are an industry classification and market reasoning agent.\n\nGiven a company name, return STRICT JSON:\n- primary_industry\n- sub_industry\n- typical_customer_base\n- top_business_challenges: string[]\n- where_behavioral_intelligence_helps: string[]\n- key_metrics_that_matter: string[]\n\nGuidelines:\n- Use general public knowledge; do NOT claim confidential or inside info.\n- Be concise and sales-relevant.\n\nCompany: {{$json.prospect_company}}\n"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "name": "OpenAI – Industry Classifier",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2,
+      "position": [
+        2896,
+        480
+      ],
+      "id": "4aa0701a-e335-4299-975d-d6a27b9ece61",
+      "credentials": {
+        "openAiApi": {
+          "id": "YVUXALLrTV90ti3L",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "industry_json_text",
+              "value": "={{$json.output?.[0]?.content?.[0]?.text || $json.choices?.[0]?.message?.content || ''}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set – Save Industry Context",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        3136,
+        480
+      ],
+      "id": "8e8a983a-2de5-4732-a0ac-d39f22fcd675"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "responses": {
+          "values": [
+            {
+              "content": "=You are a B2B sales strategy planning agent for intentHQ.\n\nReturn STRICT JSON:\n- primary_sales_angle\n- secondary_angles: string[]\n- outcomes_to_emphasize: string[]\n- intenthq_capabilities_to_emphasize: string[]\n- proof_points_to_use: string[] (MUST be supported by brand context; if none, say \"Proof points available on request\")\n- objections_and_responses: {objection: string, response: string}[]\n\nRules:\n- Do NOT invent customer names, metrics, awards, integrations.\n- Only reference proof points present in brand context.\n\nProspect:\n{{ $('Set – Normalize Inputs').item.json.prospect_company }}\n\nBrand context (JSON string):\n{{ $('Set – Save Brand Context').item.json.brand_context_json }}\n\nIndustry context (JSON string):\n{{$json.industry_json_text}}\n"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "name": "OpenAI – Sales Strategy Planner",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2,
+      "position": [
+        3376,
+        480
+      ],
+      "id": "252f1984-7753-47d3-8c77-1b55ca4d5f9e",
+      "credentials": {
+        "openAiApi": {
+          "id": "YVUXALLrTV90ti3L",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "strategy_json_text",
+              "value": "={{$json.output?.[0]?.content?.[0]?.text || $json.choices?.[0]?.message?.content || ''}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set – Save Strategy",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        3616,
+        480
+      ],
+      "id": "5de74ede-368b-40dc-b28e-daaab21d87f7"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "responses": {
+          "values": [
+            {
+              "content": "=You are an enterprise B2B sales presentation generator for intentHQ.\n\nCreate a polished, prospect-specific slide deck in Markdown.\n\nProspect: {{$json.prospect_company}}\nAlways refer to the prospect by this exact name.\n\nBrand voice: confident, data-driven, enterprise-focused, privacy-first.\n\nHard constraints:\n- Never use placeholders such as [Prospect Name], [Company].\n- Do NOT invent metrics, customer logos, awards, certifications.\n- If proof points are not present in brand context, write \"Proof points available on request\".\n\nOutput structure (aim for exactly {{$json.slides_count}} slides):\n- Slide 1: Title (use {{$json.presentation_title}})\n- Slide 2: Executive summary\n- Slide 3: Prospect challenges\n- Slide 4: Why behavioral intelligence matters now\n- Slide 5: intentHQ overview (grounded)\n- Slide 6: Key use cases for this prospect\n- Slide 7: Business impact / ROI (no fabricated numbers)\n- Slide 8: Proof points & credibility (only supported)\n- Slide 9: Implementation roadmap\n- Slide 10: Next steps\n\nBrand context (JSON string):\n{{ $('Set – Save Brand Context').item.json.brand_context_json }}\n\nIndustry context (JSON string):\n{{ $('Set – Save Industry Context').item.json.industry_json_text }}\n\nSales strategy (JSON string):\n{{$json.strategy_json_text}}\n"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "name": "OpenAI – Presentation Generator (Markdown)",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2,
+      "position": [
+        3856,
+        480
+      ],
+      "id": "861d1621-d21d-4135-82dc-2b10a8d0c2ac",
+      "credentials": {
+        "openAiApi": {
+          "id": "YVUXALLrTV90ti3L",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "presentation_markdown",
+              "value": "={{$json.output?.[0]?.content?.[0]?.text || $json.choices?.[0]?.message?.content || ''}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set – Save Markdown",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        4096,
+        480
+      ],
+      "id": "35755d8f-2312-4804-b165-b79995a6f78d"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "responses": {
+          "values": [
+            {
+              "content": "=Convert this Markdown slide deck into clean Google Docs-ready text.\n\nRules:\n- Keep headings for each slide\n- Use bullets for points\n- Remove markdown syntax (#, **, etc.)\n- Do NOT add new content\n\nMarkdown:\n{{$json.presentation_markdown}}\n"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "name": "OpenAI – Markdown to Doc Text",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2,
+      "position": [
+        4336,
+        336
+      ],
+      "id": "bd6927ba-2203-4a0c-abe3-7d0a163d82bf",
+      "credentials": {
+        "openAiApi": {
+          "id": "YVUXALLrTV90ti3L",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "doc_text",
+              "value": "={{$json.output?.[0]?.content?.[0]?.text || $json.choices?.[0]?.message?.content || ''}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set – Save Doc Text",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        4576,
+        336
+      ],
+      "id": "88734849-e39b-4f60-82eb-dc17a5cc6720"
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "folderId": "default",
+        "title": "={{ $('Set – Normalize Inputs').item.json.prospect_company }} /IntentHQ Presentation"
+      },
+      "name": "Google Docs – Create Document",
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 1,
+      "position": [
+        4816,
+        336
+      ],
+      "id": "89625a82-1f24-4d34-b6a5-ebdc63418b98",
+      "credentials": {
+        "googleDocsOAuth2Api": {
+          "id": "HUOSr6BmZ6lKelhH",
+          "name": "Google Docs account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "operation": "update",
+        "documentURL": "={{ $json.id }}",
+        "actionsUi": {
+          "actionFields": [
+            {
+              "action": "insert",
+              "text": "={{ $('Set – Save Doc Text').item.json.output[0].content[0].text }}"
+            }
+          ]
+        }
+      },
+      "name": "Google Docs – Append Content",
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 1,
+      "position": [
+        5056,
+        336
+      ],
+      "id": "10eef539-ade1-431f-b2bc-c162c5fa06c1",
+      "credentials": {
+        "googleDocsOAuth2Api": {
+          "id": "HUOSr6BmZ6lKelhH",
+          "name": "Google Docs account"
+        }
+      }
+    }
+  ],
+  "pinData": {
+    "Webhook – Prospect Input": [
+      {
+        "json": {
+          "prospect_company": "Spotify",
+          "presentation_title": "Optional Custom Title",
+          "prospect_contact": "Optional Contact Name"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Webhook – Prospect Input": {
+      "main": [
+        [
+          {
+            "node": "Set – Normalize Inputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set – Normalize Inputs": {
+      "main": [
+        [
+          {
+            "node": "HTTP – Fetch intentHQ Home",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "HTTP – Fetch intentHQ Intent Edge",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "HTTP – Fetch intentHQ Intent Lift",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "HTTP – Fetch intentHQ Values",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP – Fetch intentHQ Home": {
+      "main": [
+        [
+          {
+            "node": "Merge – Website Pages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP – Fetch intentHQ Intent Edge": {
+      "main": [
+        [
+          {
+            "node": "Merge – Website Pages",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "HTTP – Fetch intentHQ Intent Lift": {
+      "main": [
+        [
+          {
+            "node": "Merge – Website Pages",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "HTTP – Fetch intentHQ Values": {
+      "main": [
+        [
+          {
+            "node": "Merge – Website Pages",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge – Website Pages": {
+      "main": [
+        [
+          {
+            "node": "Code – HTML to Text (Corpus)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code – HTML to Text (Corpus)": {
+      "main": [
+        [
+          {
+            "node": "OpenAI – Brand Grounding Extractor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI – Brand Grounding Extractor": {
+      "main": [
+        [
+          {
+            "node": "Set – Save Brand Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set – Save Brand Context": {
+      "main": [
+        [
+          {
+            "node": "OpenAI – Industry Classifier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI – Industry Classifier": {
+      "main": [
+        [
+          {
+            "node": "Set – Save Industry Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set – Save Industry Context": {
+      "main": [
+        [
+          {
+            "node": "OpenAI – Sales Strategy Planner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI – Sales Strategy Planner": {
+      "main": [
+        [
+          {
+            "node": "Set – Save Strategy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set – Save Strategy": {
+      "main": [
+        [
+          {
+            "node": "OpenAI – Presentation Generator (Markdown)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI – Presentation Generator (Markdown)": {
+      "main": [
+        [
+          {
+            "node": "Set – Save Markdown",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set – Save Markdown": {
+      "main": [
+        [
+          {
+            "node": "OpenAI – Markdown to Doc Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI – Markdown to Doc Text": {
+      "main": [
+        [
+          {
+            "node": "Set – Save Doc Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set – Save Doc Text": {
+      "main": [
+        [
+          {
+            "node": "Google Docs – Create Document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Docs – Create Document": {
+      "main": [
+        [
+          {
+            "node": "Google Docs – Append Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Docs – Append Content": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "e52d62e5-590c-4fcc-859f-7cadf9c23e40",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "69b16eb8a424d4360d073e14a7b23a9bf27b29305e8cc6e3496b1bc6be8edb2e"
+  },
+  "id": "8S82K-zcHiX82J-cyE3q8",
+  "tags": []
+}
